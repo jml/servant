@@ -1,14 +1,15 @@
 {-# LANGUAGE CPP                  #-}
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE DeriveGeneric        #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PolyKinds            #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances    #-}
 
 module Servant.ServerSpec where
 
@@ -30,15 +31,16 @@ import           Network.HTTP.Types         (Status (..), hAccept, hContentType,
                                              methodHead, methodPatch,
                                              methodPost, methodPut, ok200,
                                              parseQuery)
-import           Network.Wai                (Application, Request, pathInfo,
+import           Network.Wai                (Application, Request, requestHeaders, pathInfo,
                                              queryString, rawQueryString,
                                              responseBuilder, responseLBS)
 import           Network.Wai.Internal       (Response (ResponseBuilder))
 import           Network.Wai.Test           (defaultRequest, request,
                                              runSession, simpleBody,
                                              simpleHeaders, simpleStatus)
-import           Servant.API                ((:<|>) (..), (:>), Capture, Delete,
-                                             Get, Header (..),
+import           Servant.API                ((:<|>) (..), (:>), AuthProtect,
+                                             BasicAuth, BasicAuthData(BasicAuthData),
+                                             Capture, Delete, Get, Header (..),
                                              Headers, HttpVersion,
                                              IsSecure (..), JSON,
                                              NoContent (..), Patch, PlainText,
@@ -47,24 +49,35 @@ import           Servant.API                ((:<|>) (..), (:>), Capture, Delete,
                                              Raw, RemoteHost, ReqBody,
                                              StdMethod (..), Verb, addHeader)
 import           Servant.API.Internal.Test.ComprehensiveAPI
-import           Servant.Server             (ServantErr (..), Server, err404,
-                                             serve)
+import           Servant.Server             (ServantErr (..), Server, err401, err404,
+                                             serve, serveWithContext, Context((:.), EmptyContext))
 import           Test.Hspec                 (Spec, context, describe, it,
                                              shouldBe, shouldContain)
+import qualified Test.Hspec.Wai             as THW
 import           Test.Hspec.Wai             (get, liftIO, matchHeaders,
-                                             matchStatus, request,
-                                             shouldRespondWith, with, (<:>))
+                                             matchStatus, shouldRespondWith,
+                                             with, (<:>))
 
+import           Servant.Server.Internal.BasicAuth (BasicAuthCheck(BasicAuthCheck),
+                                                    BasicAuthResult(Authorized,Unauthorized))
+import           Servant.Server.Experimental.Auth
+                                            (AuthHandler, AuthServerData,
+                                             mkAuthHandler)
 import           Servant.Server.Internal.RoutingApplication
                                             (toApplication, RouteResult(..))
 import           Servant.Server.Internal.Router
                                             (tweakResponse, runRouter,
                                              Router, Router'(LeafRouter))
+import           Servant.Server.Internal.Context
+                                            (NamedContext(..))
 
 -- * comprehensive api test
 
 -- This declaration simply checks that all instances are in place.
-_ = serve comprehensiveAPI
+_ = serveWithContext comprehensiveAPI comprehensiveApiContext
+
+comprehensiveApiContext :: Context '[NamedContext "foo" '[]]
+comprehensiveApiContext = NamedContext EmptyContext :. EmptyContext
 
 -- * Specs
 
@@ -80,6 +93,8 @@ spec = do
   responseHeadersSpec
   routerSpec
   miscCombinatorSpec
+  basicAuthSpec
+  genAuthSpec
 
 ------------------------------------------------------------------------------
 -- * verbSpec {{{
@@ -111,49 +126,49 @@ verbSpec = describe "Servant.API.Verb" $ do
           -- HEAD and 214/215 need not return bodies
           unless (status `elem` [214, 215] || method == methodHead) $
             it "returns the person" $ do
-              response <- Test.Hspec.Wai.request method "/" [] ""
+              response <- THW.request method "/" [] ""
               liftIO $ statusCode (simpleStatus response) `shouldBe` status
               liftIO $ decode' (simpleBody response) `shouldBe` Just alice
 
           it "returns no content on NoContent" $ do
-              response <- Test.Hspec.Wai.request method "/noContent" [] ""
+              response <- THW.request method "/noContent" [] ""
               liftIO $ statusCode (simpleStatus response) `shouldBe` status
               liftIO $ simpleBody response `shouldBe` ""
 
           -- HEAD should not return body
           when (method == methodHead) $
             it "HEAD returns no content body" $ do
-              response <- Test.Hspec.Wai.request method "/" [] ""
+              response <- THW.request method "/" [] ""
               liftIO $ simpleBody response `shouldBe` ""
 
           it "throws 405 on wrong method " $ do
-            Test.Hspec.Wai.request (wrongMethod method) "/" [] ""
+            THW.request (wrongMethod method) "/" [] ""
               `shouldRespondWith` 405
 
           it "returns headers" $ do
-            response1 <- Test.Hspec.Wai.request method "/header" [] ""
+            response1 <- THW.request method "/header" [] ""
             liftIO $ statusCode (simpleStatus response1) `shouldBe` status
             liftIO $ simpleHeaders response1 `shouldContain` [("H", "5")]
 
-            response2 <- Test.Hspec.Wai.request method "/header" [] ""
+            response2 <- THW.request method "/header" [] ""
             liftIO $ statusCode (simpleStatus response2) `shouldBe` status
             liftIO $ simpleHeaders response2 `shouldContain` [("H", "5")]
 
           it "handles trailing '/' gracefully" $ do
-            response <- Test.Hspec.Wai.request method "/headerNC/" [] ""
+            response <- THW.request method "/headerNC/" [] ""
             liftIO $ statusCode (simpleStatus response) `shouldBe` status
 
           it "returns 406 if the Accept header is not supported" $ do
-            Test.Hspec.Wai.request method "" [(hAccept, "crazy/mime")] ""
+            THW.request method "" [(hAccept, "crazy/mime")] ""
               `shouldRespondWith` 406
 
           it "responds if the Accept header is supported" $ do
-            response <- Test.Hspec.Wai.request method ""
+            response <- THW.request method ""
                [(hAccept, "application/json")] ""
             liftIO $ statusCode (simpleStatus response) `shouldBe` status
 
           it "sets the Content-Type header" $ do
-            response <- Test.Hspec.Wai.request method "" [] ""
+            response <- THW.request method "" [] ""
             liftIO $ simpleHeaders response `shouldContain`
               [("Content-Type", "application/json")]
 
@@ -224,7 +239,7 @@ qpServer = queryParamServer :<|> qpNames :<|> qpCapitalize
 queryParamSpec :: Spec
 queryParamSpec = do
   describe "Servant.API.QueryParam" $ do
-      it "allows to retrieve simple GET parameters" $
+      it "allows retrieving simple GET parameters" $
         (flip runSession) (serve queryParamApi qpServer) $ do
           let params1 = "?name=bob"
           response1 <- Network.Wai.Test.request defaultRequest{
@@ -236,7 +251,7 @@ queryParamSpec = do
               name = "bob"
              }
 
-      it "allows to retrieve lists in GET parameters" $
+      it "allows retrieving lists in GET parameters" $
         (flip runSession) (serve queryParamApi qpServer) $ do
           let params2 = "?names[]=bob&names[]=john"
           response2 <- Network.Wai.Test.request defaultRequest{
@@ -250,7 +265,7 @@ queryParamSpec = do
              }
 
 
-      it "allows to retrieve value-less GET parameters" $
+      it "allows retrieving value-less GET parameters" $
         (flip runSession) (serve queryParamApi qpServer) $ do
           let params3 = "?capitalize"
           response3 <- Network.Wai.Test.request defaultRequest{
@@ -300,7 +315,7 @@ reqBodySpec = describe "Servant.API.ReqBody" $ do
 
   let server :: Server ReqBodyApi
       server = return :<|> return . age
-      mkReq method x = Test.Hspec.Wai.request method x
+      mkReq method x = THW.request method x
          [(hContentType, "application/json;charset=utf-8")]
 
   with (return $ serve reqBodyApi server) $ do
@@ -313,7 +328,7 @@ reqBodySpec = describe "Servant.API.ReqBody" $ do
       mkReq methodPut "/blah" "some invalid body" `shouldRespondWith` 400
 
     it "responds with 415 if the request body media type is unsupported" $ do
-      Test.Hspec.Wai.request methodPost "/"
+      THW.request methodPost "/"
         [(hContentType, "application/nonsense")] "" `shouldRespondWith` 415
 
 -- }}}
@@ -337,13 +352,13 @@ headerSpec = describe "Servant.API.Header" $ do
         expectsString Nothing  = error "Expected a string"
 
     with (return (serve headerApi expectsInt)) $ do
-        let delete' x = Test.Hspec.Wai.request methodDelete x [("MyHeader", "5")]
+        let delete' x = THW.request methodDelete x [("MyHeader", "5")]
 
         it "passes the header to the handler (Int)" $
             delete' "/" "" `shouldRespondWith` 200
 
     with (return (serve headerApi expectsString)) $ do
-        let delete' x = Test.Hspec.Wai.request methodDelete x [("MyHeader", "more from you")]
+        let delete' x = THW.request methodDelete x [("MyHeader", "more from you")]
 
         it "passes the header to the handler (String)" $
             delete' "/" "" `shouldRespondWith` 200
@@ -449,19 +464,19 @@ responseHeadersSpec = describe "ResponseHeaders" $ do
 
     it "includes the headers in the response" $
       forM_ methods $ \method ->
-        Test.Hspec.Wai.request method "/" [] ""
+        THW.request method "/" [] ""
           `shouldRespondWith` "\"hi\""{ matchHeaders = ["H1" <:> "5", "H2" <:> "kilroy"]
                                       , matchStatus  = 200
                                       }
 
     it "responds with not found for non-existent endpoints" $
       forM_ methods $ \method ->
-        Test.Hspec.Wai.request method "blahblah" [] ""
+        THW.request method "blahblah" [] ""
           `shouldRespondWith` 404
 
     it "returns 406 if the Accept header is not supported" $
       forM_ methods $ \method ->
-        Test.Hspec.Wai.request method "" [(hAccept, "crazy/mime")] ""
+        THW.request method "" [(hAccept, "crazy/mime")] ""
           `shouldRespondWith` 406
 
 -- }}}
@@ -521,6 +536,72 @@ miscCombinatorSpec = with (return $ serve miscApi miscServ) $
       go "/host" "\"0.0.0.0:0\""
 
   where go path res = Test.Hspec.Wai.get path `shouldRespondWith` res
+
+-- }}}
+------------------------------------------------------------------------------
+-- * Basic Authentication {{{
+------------------------------------------------------------------------------
+
+type BasicAuthAPI = BasicAuth "foo" () :> "basic" :> Get '[JSON] Animal
+
+basicAuthApi :: Proxy BasicAuthAPI
+basicAuthApi = Proxy
+basicAuthServer :: Server BasicAuthAPI
+basicAuthServer = const (return jerry)
+
+basicAuthContext :: Context '[ BasicAuthCheck () ]
+basicAuthContext =
+  let basicHandler = BasicAuthCheck $ (\(BasicAuthData usr pass) ->
+        if usr == "servant" && pass == "server"
+        then return (Authorized ())
+        else return Unauthorized
+        )
+  in basicHandler :. EmptyContext
+
+basicAuthSpec :: Spec
+basicAuthSpec = do
+  describe "Servant.API.BasicAuth" $ do
+    with (return (serveWithContext basicAuthApi basicAuthContext basicAuthServer)) $ do
+
+      context "Basic Authentication" $ do
+        it "returns with 401 with bad password" $ do
+          get "/basic" `shouldRespondWith` 401
+        it "returns 200 with the right password" $ do
+          THW.request methodGet "/basic" [("Authorization","Basic c2VydmFudDpzZXJ2ZXI=")] "" `shouldRespondWith` 200
+
+-- }}}
+------------------------------------------------------------------------------
+-- * General Authentication {{{
+------------------------------------------------------------------------------
+
+type GenAuthAPI = AuthProtect "auth" :> "auth" :> Get '[JSON] Animal
+authApi :: Proxy GenAuthAPI
+authApi = Proxy
+authServer :: Server GenAuthAPI
+authServer = const (return tweety)
+
+type instance AuthServerData (AuthProtect "auth") = ()
+
+genAuthContext :: Context '[ AuthHandler Request () ]
+genAuthContext =
+  let authHandler = (\req ->
+        if elem ("Auth", "secret") (requestHeaders req)
+        then return ()
+        else throwE err401
+        )
+  in mkAuthHandler authHandler :. EmptyContext
+
+genAuthSpec :: Spec
+genAuthSpec = do
+  describe "Servant.API.Auth" $ do
+    with (return (serveWithContext authApi genAuthContext authServer)) $ do
+
+      context "Custom Auth Protection" $ do
+        it "returns 401 when missing headers" $ do
+          get "/auth" `shouldRespondWith` 401
+        it "returns 200 with the right header" $ do
+          THW.request methodGet "/auth" [("Auth","secret")] "" `shouldRespondWith` 200
+
 -- }}}
 ------------------------------------------------------------------------------
 -- * Test data types {{{

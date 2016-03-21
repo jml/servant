@@ -23,9 +23,14 @@ module Servant.API (
   -- | Is the request made through HTTPS?
   module Servant.API.Vault,
   -- | Access the location for arbitrary data to be shared by applications and middleware
+  module Servant.API.WithNamedContext,
+  -- | Access context entries in combinators in servant-server
 
   -- * Actual endpoints, distinguished by HTTP method
   module Servant.API.Verbs,
+
+  -- * Authentication
+  module Servant.API.BasicAuth,
 
   -- * Content Types
   module Servant.API.ContentTypes,
@@ -43,18 +48,25 @@ module Servant.API (
   module Web.HttpApiData,
   -- | Classes and instances for types that can be converted to and from HTTP API data.
 
+
+  -- * Experimental modules
+  module Servant.API.Experimental.Auth,
+  -- | General Authentication
+
   -- * Utilities
   module Servant.Utils.Links,
   -- | Type-safe internal URIs
   ) where
 
 import           Servant.API.Alternative     ((:<|>) (..))
+import           Servant.API.BasicAuth       (BasicAuth,BasicAuthData(..))
 import           Servant.API.Capture         (Capture, CaptureAll)
 import           Servant.API.ContentTypes    (Accept (..), FormUrlEncoded,
                                               FromFormUrlEncoded (..), JSON,
                                               MimeRender (..), NoContent (NoContent),
                                               MimeUnrender (..), OctetStream,
                                               PlainText, ToFormUrlEncoded (..))
+import           Servant.API.Experimental.Auth (AuthProtect)
 import           Servant.API.Header          (Header (..))
 import           Servant.API.HttpVersion     (HttpVersion (..))
 import           Servant.API.IsSecure        (IsSecure (..))
@@ -88,6 +100,7 @@ import           Servant.API.Verbs           (PostCreated, Delete, DeleteAccepte
                                               PutNoContent, PutNonAuthoritative,
                                               ReflectMethod (reflectMethod),
                                               Verb, StdMethod(..))
+import           Servant.API.WithNamedContext (WithNamedContext)
 import           Servant.Utils.Links         (HasLink (..), IsElem, IsElem',
                                               URI (..), safeLink)
 import           Web.HttpApiData             (FromHttpApiData (..),

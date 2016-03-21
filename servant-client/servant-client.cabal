@@ -10,9 +10,9 @@ description:
   <https://github.com/haskell-servant/servant/blob/master/servant-client/CHANGELOG.md CHANGELOG>
 license:             BSD3
 license-file:        LICENSE
-author:              Alp Mestanogullari, Sönke Hahn, Julian K. Arni
-maintainer:          alpmestan@gmail.com
-copyright:           2014 Zalora South East Asia Pte Ltd
+author:              Servant Contributors
+maintainer:          haskell-servant-maintainers@googlegroups.com
+copyright:           2014-2016 Zalora South East Asia Pte Ltd, Servant Contributors
 category:            Web
 build-type:          Simple
 extra-source-files:  include/*.h
@@ -27,12 +27,15 @@ source-repository head
 library
   exposed-modules:
     Servant.Client
+    Servant.Client.Experimental.Auth
     Servant.Common.BaseUrl
+    Servant.Common.BasicAuth
     Servant.Common.Req
   build-depends:
       base >=4.7 && <5
     , aeson
     , attoparsec
+    , base64-bytestring
     , bytestring
     , exceptions
     , http-api-data >= 0.1  && < 0.3
