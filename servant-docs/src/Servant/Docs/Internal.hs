@@ -702,8 +702,21 @@ instance (KnownSymbol sym, ToCapture (Capture sym a), HasDocs sublayout)
           symP = Proxy :: Proxy sym
 
 
--- | @"tree" :> 'CaptureAll' Text@ will appear as
--- @/tree/<path>@ in the docs
+-- | @"tree" :> 'CaptureAll' "path" Text@ will appear as
+-- @/tree/[:path[/:path[...]]]@ in the docs
+instance (KnownSymbol sym, ToCapture (CaptureAll sym a), HasDocs sublayout)
+      => HasDocs (CaptureAll sym a :> sublayout) where
+
+  docsFor Proxy (endpoint, action) =
+    docsFor sublayoutP (endpoint', action')
+
+    where sublayoutP = Proxy :: Proxy sublayout
+          captureP = Proxy :: Proxy (CaptureAll sym a)
+
+          action' = over captures (|> toCapture captureP) action
+          endpoint' = over path (\p -> p ++ [nested (":" ++ symbolVal symP)]) endpoint
+          nested word = "[" ++ word ++ "[/" ++ word ++ "[...]]]"
+          symP = Proxy :: Proxy sym
 --
 -- TODO: Add a "symbol" to the CaptureAll definition so that we can re-use the
 -- ToCapture aspect of this.
