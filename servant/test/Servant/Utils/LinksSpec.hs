@@ -13,7 +13,7 @@ import           Servant.API
 type TestApi =
   -- Capture and query params
        "hello" :> Capture "name" String :> QueryParam "capital" Bool :> Delete '[JSON] ()
-  :<|> "all" :> CaptureAll String :> Get '[JSON] ()
+  :<|> "all" :> CaptureAll "value" String :> Get '[JSON] ()
 
   -- Flags
   :<|> "balls" :> QueryFlag "bouncy" :> QueryFlag "fast" :> Delete '[JSON] ()
@@ -48,7 +48,7 @@ spec = describe "Servant.Utils.Links" $ do
         apiLink l2 "bye" (Just True) `shouldBeURI` "hello/bye?capital=true"
 
     it "generates correct links for CaptureAll" $ do
-        apiLink (Proxy :: Proxy ("all" :> CaptureAll String :> Get '[JSON] ()))
+        apiLink (Proxy :: Proxy ("all" :> CaptureAll "value" String :> Get '[JSON] ()))
           ["roads", "lead", "to", "rome"]
           `shouldBeURI` "all/roads/lead/to/rome"
 

@@ -103,7 +103,7 @@ instance (HasServer a context, HasServer b context) => HasServer (a :<|> b) cont
 captured :: FromHttpApiData a => proxy (Capture sym a) -> Text -> Maybe a
 captured _ = parseUrlPieceMaybe
 
-capturedAll :: FromHttpApiData a => proxy (CaptureAll a) -> [Text] -> Maybe [a]
+capturedAll :: FromHttpApiData a => proxy (CaptureAll sym a) -> [Text] -> Maybe [a]
 capturedAll _ = either (const Nothing) Just . parseUrlPieces
 
 -- | If you use 'Capture' in one of the endpoints for your API,
@@ -140,16 +140,16 @@ instance (KnownSymbol capture, FromHttpApiData a, HasServer sublayout context)
     where
       captureProxy = Proxy :: Proxy (Capture capture a)
 
-instance (FromHttpApiData a, HasServer sublayout context)
-  => HasServer (CaptureAll a :> sublayout) context where
+instance (KnownSymbol capture, FromHttpApiData a, HasServer sublayout context)
+  => HasServer (CaptureAll capture a :> sublayout) context where
 
-  type ServerT (CaptureAll a :> sublayout) m = [a] -> ServerT sublayout m
+  type ServerT (CaptureAll capture a :> sublayout) m = [a] -> ServerT sublayout m
 
   route _ context d = WithRequest $ \request ->
     let
       subRequest = request { pathInfo = [] }
       subRoute = route (Proxy :: Proxy sublayout) context (addCapture d (return xs))
-      xs = case capturedAll (Proxy :: Proxy (CaptureAll a)) (pathInfo request) of
+      xs = case capturedAll (Proxy :: Proxy (CaptureAll capture a)) (pathInfo request) of
               Nothing -> Fail err404
               Just vs -> Route vs
     in (subRequest, subRoute)

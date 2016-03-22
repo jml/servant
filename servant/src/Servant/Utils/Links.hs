@@ -289,8 +289,8 @@ instance (ToHttpApiData v, HasLink sub)
             addSegment (escape . Text.unpack $ toUrlPiece v) l
 
 instance (ToHttpApiData v, HasLink sub)
-    => HasLink (CaptureAll v :> sub) where
-    type MkLink (CaptureAll v :> sub) = [v] -> MkLink sub
+    => HasLink (CaptureAll sym v :> sub) where
+    type MkLink (CaptureAll sym v :> sub) = [v] -> MkLink sub
     toLink _ l vs =
       toLink (Proxy :: Proxy sub) $
         foldl' (flip $ addSegment . escape . Text.unpack . toUrlPiece) l vs

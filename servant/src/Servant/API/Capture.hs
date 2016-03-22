@@ -21,8 +21,8 @@ data Capture (sym :: Symbol) a
 -- Example:
 --
 -- >>>            -- GET /src/*
--- >>> type MyApi = "src" :> CaptureAll Text :> Get '[JSON] SourceFile
-data CaptureAll a
+-- >>> type MyApi = "src" :> CaptureAll "path" Text :> Get '[JSON] SourceFile
+data CaptureAll (sym :: Symbol) a
     deriving (Typeable)
 
 -- $setup

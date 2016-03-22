@@ -123,10 +123,10 @@ instance (KnownSymbol capture, ToHttpApiData a, HasClient sublayout)
 
     where p = unpack (toUrlPiece val)
 
-instance (ToHttpApiData a, HasClient sublayout)
-      => HasClient (CaptureAll a :> sublayout) where
+instance (KnownSymbol capture, ToHttpApiData a, HasClient sublayout)
+      => HasClient (CaptureAll capture a :> sublayout) where
 
-  type Client (CaptureAll a :> sublayout) =
+  type Client (CaptureAll capture a :> sublayout) =
     [a] -> Client sublayout
 
   clientWithRoute Proxy req baseurl manager vals =
