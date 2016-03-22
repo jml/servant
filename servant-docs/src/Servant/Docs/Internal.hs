@@ -316,7 +316,7 @@ type family IsIn (endpoint :: *) (api :: *) :: Constraint where
     IsIn (e :> sa) (e :> sb)           = IsIn sa sb
     IsIn e e                           = ()
 
--- | Create an 'ExtraInfo' that is garunteed to be within the given API layout.
+-- | Create an 'ExtraInfo' that is guarunteed to be within the given API layout.
 --
 -- The safety here is to ensure that you only add custom documentation to an
 -- endpoint that actually exists within your API.
@@ -700,6 +700,17 @@ instance (KnownSymbol sym, ToCapture (Capture sym a), HasDocs sublayout)
           action' = over captures (|> toCapture captureP) action
           endpoint' = over path (\p -> p ++ [":" ++ symbolVal symP]) endpoint
           symP = Proxy :: Proxy sym
+
+
+-- | @"tree" :> 'CaptureAll' Text@ will appear as
+-- @/tree/<path>@ in the docs
+--
+-- TODO: Add a "symbol" to the CaptureAll definition so that we can re-use the
+-- ToCapture aspect of this.
+--
+-- TODO: Write a HasDocs instance for this
+--
+-- TODO: Find out what other people do for this sort of documentation.
 
 
 instance OVERLAPPABLE_
