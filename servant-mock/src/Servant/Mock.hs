@@ -118,6 +118,9 @@ instance (KnownSymbol s, FromHttpApiData a, HasMock rest context) => HasMock (Ca
 instance (FromHttpApiData a, HasMock rest context) => HasMock (CaptureAll a :> rest) context where
   mock _ context = \_ -> mock (Proxy :: Proxy rest) context
 
+instance (AllCTUnrender ctypes a, HasMock rest context) => HasMock (ReqBody ctypes a :> rest) context where
+  mock _ context = \_ -> mock (Proxy :: Proxy rest) context
+
 instance HasMock rest context => HasMock (RemoteHost :> rest) context where
   mock _ context = \_ -> mock (Proxy :: Proxy rest) context
 
